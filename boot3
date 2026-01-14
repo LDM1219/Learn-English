@@ -1,0 +1,476 @@
+乱七八糟
+
+JDK = JRE + 开发工具集（例如Javac编译工具等）
+JRE = JVM + Java SE标准类库
+
+
+# 1. 依赖管理机制
+
+思考：
+
+:: 1、为什么导入 `starter-web` 所有相关依赖都导入进来?
+   * 开发什么场景，导入什么场景启动器。
+   * maven依赖传递原则。A-B-C: A就拥有B和C
+   * 导入 场景启动器。场景启动器 自动把这个场景的所有核心依赖全部导入进来
+
+2、为什么版本号都不用写?
+   * 每个boot项目都有一个父项目 `spring-boot-starter-parent`
+   * parent的父项目是 `spring-boot-dependencies`
+   * 父项目 版本仲裁中心，把所有常见的jar的依赖版本都声明好了。
+   * 比如: `mysql-connector-j`
+
+3、自定义版本号
+   * 利用maven的就近原则
+     * 直接在当前项目 `properties` 标签中声明父项目用的版本属性的key
+     * 直接在导入依赖的时候声明版本
+     
+     
+# 2. 自动配置机制
+
+## 1. 初步理解
+
+* 自动配置的 Tomcat、SpringMVC 等
+
+:: * 导入场景，容器中就会自动配置好这个场景的核心组件。
+   * 以前: DispatcherServlet、ViewResolver、CharacterEncodingFilter....
+   * 现在: 自动配置好的这些组件
+   * 验证: 容器中有了什么组件，就具有什么功能
+
+```java
+public static void main(String[] args) {
+    //java10: 局部变量类型的自动推断
+    var ioc = SpringApplication.run(MainApplication.class, args);
+    
+    //1、获取容器中所有组件的名字
+    String[] names = ioc.getBeanDefinitionNames();
+    //2、挨个遍历:
+    // dispatcherServlet、beanNameViewResolver、characterEncodingFilter、multipartResolver
+    // SpringBoot把以前配置的核心组件现在都给我们自动配置好了。
+    for (String name : names) {
+        System.out.println(name);
+    }
+}
+```
+
+# 默认的包扫描规则
+
+* @SpringBootApplication 标注的类就是主程序类
+
+* SpringBoot只会扫描主程序所在的包及其下面的子包，自动的component-scan功能
+
+* 自定义扫描路径
+  * @SpringBootApplication(scanBasePackages = "com.atguigu")
+  * @ComponentScan("com.atguigu") 直接指定扫描的路径
+￼
+￼
+
+1.1 注解与组件注册
+
+✅ @Bean 的真正作用
+@Bean 是告诉 Spring 容器："请把这个方法的返回值作为一个 Bean 对象来管理"
+
+```java
+@Scope("prototype")  // no usages
+@Bean("userHaha")
+public User userHaha(){
+    var user = new User();
+    user.setId(21);
+    user.setName("haha");
+    return user;
+}
+```￼
+@Scope("prototype”)声明多实例
+Object user1 = ioc.getBean("userHaha");
+Object user2 =  ioc.getBean("userHaha");
+System.out.println(user1 == user2);
+不相等
+不声明则默认单实例，user1 == user2相等
+
+
+组件只有才容器中，才能使用Spring Boot提供的各种功能
+
+给容器注册组件，
+1. 首先需要一个配置类，然后把组件放入其容器中，然后使用@Bean方法
+2. 第三方包的组件，放入容器中
+    1. 方法1，在容器中使用@Bean
+  ```java
+@Configuration  // no usages
+public class AppConfig {
+    
+    @Scope("prototype")  // no usages
+    @Bean("userHaha")
+    public User userHaha(){
+        var user = new User();
+        user.setId(21);
+        user.setName("haha");
+        return user;
+    }
+    
+    //  第三方的组件
+    @Bean  // no usages
+    public ObjectIdGenerators objectIdGenerators(){
+        return new ObjectIdGenerators();
+    }
+}
+```￼
+	2: 方法2，使用@Import()直接导入第三方组件
+```java
+@Import(ObjectIdGenerators.class)  // no usages
+@Configuration
+public class AppConfig {
+    // ... rest of the class as shown in previous image
+}
+```￼
+
+
+总结：
+# 1. 常用注解
+
+> SpringBoot抛弃XML配置方式，改为全注解驱动
+
+# 1. 组件注册
+
+@Configuration、@SpringBootConfiguration
+
+@Bean、@Scope
+
+@Controller、@Service、@Repository、@Component
+
+@Import
+
+@ComponentScan
+
+⋮
+
+步骤:
+
+1、@Configuration 编写一个配置类
+
+2、在配置类中，自定义方法给容器中注册组件，配合@Bean
+
+3、或使用@Import 导入第三方的组件￼
+
+
+1.2 条件注解
+# 2. 条件注解
+
+如果注解指定的条件成立，则触发指定行为
+
+@ConditionalOnXxx
+
+⋮ @ConditionalOnClass: 如果类路径中存在这个类，则触发指定行为
+
+@ConditionalOnMissingClass: 如果类路径中不存在这个类，则触发指定行为
+
+@ConditionalOnBean: 如果容器中存在这个Bean（组件），则触发指定行为
+
+@ConditionalOnMissingBean: 如果容器中不存在这个Bean（组件），则触发指定行为
+
+@ConditionalOnRepositoryType (org.springframework.boot.autoconfigure.data)
+@ConditionalOnDefaultWebSecurity (org.springframework.boot.autoconfigure.security)
+@ConditionalOnSingleCandidate (org.springframework.boot.autoconfigure.condition)
+@ConditionalOnWebApplication (org.springframework.boot.autoconfigure.condition)
+@ConditionalOnWarDeployment (org.springframework.boot.autoconfigure.condition)
+@ConditionalOnJndi (org.springframework.boot.autoconfigure.condition)
+@ConditionalOnResource (org.springframework.boot.autoconfigure.condition)
+@ConditionalOnExpression (org.springframework.boot.autoconfigure.condition)
+@ConditionalOnClass (org.springframework.boot.autoconfigure.condition)
+@ConditionalOnEnabledResourceChain (org.springframework.boot.autoconfigure.web)
+@ConditionalOnMissingClass (org.springframework.boot.autoconfigure.condition)
+￼
+@ConditionalOnMissingClass(value="com.alibaba.druid.FastsqlException") //放在类级别，如果注解判断生效，则整个配置类才生效
+@SpringBootConfiguration
+public class AppConfig2 {
+
+    @ConditionalOnClass(name="com.alibaba.druid.FastsqlException") //放在方法级别，单独对这个方法进行注解判断。
+    // ...
+}
+
+
+1.3 属性绑定
+# 3. 属性绑定
+
+@ConfigurationProperties: 声明组件的属性和配置文件哪些前缀开始进行绑定
+
+⋮ @EnableConfigurationProperties: 快速注册注解:
+
+* 场景: SpringBoot默认只扫描自己主程序所在的包。如果导入第三方包，即使组件上标注了
+  @Component、@ConfigurationProperties注解，也没用。因为组件都扫描不进来
+
+将容器中任意组件（Bean）的属性值和配置文件的配置项的值进行绑定
+
+* 1、给容器中注册组件（@Component、@Bean）
+
+* 2、使用@ConfigurationProperties 声明组件和配置文件的哪些配置项进行绑定
+￼
+首先，在配置文件中，配置一些属性：
+
+erve.port=9999
+pig.id=1
+
+
+￼
+方法一：
+
+把组件注册到容器中：
+1.在该class类文件中使用@component 把组件放到容器中
+```java
+  @Component
+  public class Pig{}
+  
+```
+
+2.或者使用在AppConfig文件中使用@Bean放到容器中
+```java
+
+@Configuration
+
+public class Appconfig{
+
+@Bean
+
+public Pig pig(){
+
+ return new Pig();
+ 
+}
+
+}
+
+￼
+
+组件只有才容器中，才能使用Spring Boot提供的各种功能
+
+然后进行属性绑定：
+在类，或者方法中使用@ConfigurationProperties(prefix = "pig") 绑定属性
+1️⃣：class类上方
+```java
+@ConfigurationProperties(prefix = "pig")  // no usages
+@Component
+public class Pig {
+    private Long id;    // 3 usages
+    private String name;    // 3 usages
+    private Integer age;    // 3 usages
+    
+    public Long getId() {    // no usages
+        return id;
+    }
+    
+    public void setId(Long id) {    // no usages
+        this.id = id;
+    }
+    
+    public String getName() {    // no usages
+        return name;
+    }
+}
+```
+￼
+2️⃣：配置文件中引入该类的方法中
+```java
+@Configuration
+public class AppConfig {
+    
+    @Bean  // no usages
+    @ConfigurationProperties(prefix = "pig")
+    public Pig pig(){
+        return new Pig();
+    }
+}
+```
+￼
+
+方法二：
+无需在类上方把组件注册到容器中，不用@Component
+```java
+@ConfigurationProperties(prefix = "sheep")  // 4 usages
+//@Component
+public class Sheep {
+    private Long id;    // 3 usages
+    private String name;    // 3 usages
+}
+```
+￼
+然后在配置文件中，@EnableConfigurationProperties(Sheep.class)进行绑定，会默认自动把这个组件放到容器中，无需使用@Component把组件注册到容器中
+```java
+@EnableConfigurationProperties(Sheep.class)  // no usages
+@Import(ObjectIdGenerators.class)
+@Configuration
+public class AppConfig {
+    
+    @Bean  // no usages
+    @ConfigurationProperties(prefix = "pig")
+    public Pig pig(){
+        return new Pig();
+    }
+}
+```
+￼
+
+@EnableConfigurationProperties一般用于导入第三方写好的组件进行属性绑定，Spring boot默认只扫描自己主程序所在的包。如果导入第三方包，即使组件上标注了@Component，@ConfigurationProperties注解也没用，因为Spring boot不会扫描到该组件，所以这些组件绑定理所当然不可能扫到。
+
+
+
+自动配置原理
+
+# Spring Boot 自动配置机制
+
+## 流程:
+
+1、导入 starter-web：导入了web开发场景
+
+* 1、场景启动器导入了相关场景的所有依赖: starter-json 、 starter-tomcat 、 springmvc
+* 2、每个场景启动器都引入了一个 spring-boot-starter ，核心场景启动器。
+* 3、核心场景启动器引入了 spring-boot-autoconfigure 包。
+* 4、 spring-boot-autoconfigure 里面囊括了所有场景的所有配置。
+* 5、只要这个包下的所有类都能生效，那么相当于SpringBoot官方写好的整合功能就生效了。
+* 6、SpringBoot默认扫描不到 spring-boot-autoconfigure 下写好的所有配置类。（这些配置类给我们做了整合操作）
+
+## 2、主程序: @SpringBootApplication
+
+* 1、 @SpringBootApplication 由三个注解组成 @SpringBootConfiguration 、 @EnableAutoConfiguration 、@ComponentScan
+* 2. SpringBoot默认只能扫描自己主程序所在的包及其下面的子包，扫描不到 spring-boot-autoconfigure 包中官方写好的配置类
+* 3、 @EnableAutoConfiguration : SpringBoot 开启自动配置的核心。
+  * 1. 是由 @Import(AutoConfigurationImportSelector.class) 提供功能: 批量给容器中导入组件。
+  * 2. SpringBoot启动会默认加载 142个配置类。
+  * 3. 这142个配置类来自于 spring-boot-autoconfigure 下 META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports 文件指定的
+  * 项目启动的时候利用 @Import 批量导入组件机制把 autoconfigure 包下的142 xxxxAutoConfiguration 类导入进来。(自动配置类)
+
+* 4、按需生效:
+  * 并不是这 142 个自动配置类都能生效
+  * 每一个自动配置类，都有条件注解 @ConditionalOnxxx ，只有条件成立，才能生效
+
+## 核心流程总结:
+
+1、导入 starter ，就会导入 autoconfigure 包。
+
+2、 autoconfigure 包里面有一个文件 META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports ，里面指定的所有启动要加载的自动配置类
+
+3、@EnableAutoConfiguration 会自动的把上面文件里面的所有自动配置类都导入进来。
+xxxAutoConfiguration 是有条件注解进行按需加载
+
+4、 xxxAutoConfiguration 给容器中导入一堆组件，组件都是从 xxxProperties 中提取属性值
+
+5、 xxxProperties 又是和配置文件进行了绑定
+
+## 效果: 导入 starter 、修改配置文件，就能修改底层行为。
+￼
+￼
+程序员：导入starter，修改配置文件:server.port=9999，即可使用
+￼
+
+整合redis例子，如何自定义改配置
+
+# 最佳实战:
+
+* 选场景，导入到项目
+  * 官方: starter
+  * 第三方: 去仓库搜
+
+* 写配置，改配置文件关键项
+  * 数据库参数（连接地址、账号密码...）
+
+* 分析这个场景给我们导入了哪些能用的组件
+  * 自动装配这些组件进行后续使用
+  * 不满意boot提供的自动配置的默认组件
+    * 定制化
+      * 改配置
+      * 自定义组件
+      ￼
+￼
+可以看到redis相关的配置是以spring.data.redis开头的。
+所以我们可以在application.properties配置文件中配置redis
+```java
+@ConfigurationProperties("spring.data.redis")  // no usages
+public class DataRedisProperties {
+    private int database;
+    // ...
+}
+```￼
+
+
+复杂对象的properties配置
+The image shows a Spring Boot property binding example with two parts:
+
+**Left side (application.properties/yml):**
+```properties
+#properties表示复杂对象
+person.name=张三
+person.age=18
+person.birthDay=2010/10/12 12:12:12
+person.like=true
+person.child.name=李四
+person.child.age=12
+person.child.birthDay=2018/10/12
+person.child.text[0]=abc
+person.child.text[1]=def
+person.dogs[0].name=小黑
+person.dogs[0].age=3
+person.dogs[1].name=小白
+person.dogs[1].age=2
+person.cats.c1.name=小蓝
+person.cats.c1.age=3
+person.cats.c2.name=小灰
+person.cats.c2.age=2
+```
+
+**Right side (Person.java):**
+```java
+@Component
+@ConfigurationProperties(prefix = "person") //和配置文件绑定
+@Data //自动生成JavaBean属性的getter/setter
+//@NoArgsConstructor //自动生成无参构造器
+//@AllArgsConstructor //自动生成全参构造器
+public class Person {
+    private String name;
+    private Integer age;
+    private Date birthDay;
+    private Boolean like;
+    private Child child; //嵌套对象
+    private List<Dog> dogs; //数组（里面是对象）
+    private Map<String,Cat> cats; //表示Map
+}
+```
+
+This example demonstrates Spring Boot's property binding capabilities:
+1. Using @ConfigurationProperties to bind properties with prefix "person"
+2. Supporting complex nested objects (Child)
+3. Supporting collections (List of Dog objects)
+4. Supporting maps (Map of String to Cat objects)
+5. Using Lombok annotations (@Data) to reduce boilerplate code￼
+
+Yaml文件表示：
+￼
+
+日志
+
+修改日志properties
+logging.pattern.console=%d{yyyy-MM-dd HH:mm:ss} %-5level [%thread] %logger{15} ===> %msg%n
+
+ru
+package com.dr.logging.controller;
+
+import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+@Slf4j
+@RestController
+public class HelloController {
+//    Logger logger = LoggerFactory.getLogger(getClass());
+    @GetMapping("/h")
+    public String hello(){
+//        logger.info("使用LoggerFactory.getLogger: 你好进来了");
+        log.info("使用@Slf4j注解: 你好进来了");
+        return  "hello";
+    }
+}
+
+
+
+
+
+
+
